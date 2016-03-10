@@ -1,0 +1,51 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+from optparse import OptionParser
+import BaseHTTPServer
+import cgi
+import os
+
+parser = OptionParser()
+parser.add_option("-p", "--port", dest="port",
+                  help="port to run the server on", metavar="PORT",
+                  default=2342)
+parser.add_option("-d", "--directory", dest="target",
+                  help="directory to save the files in", metavar="DIRECTORY",
+                  default='./')
+(options, args) = parser.parse_args()
+
+
+class Handler(BaseHTTPServer.BaseHTTPRequestHandler):
+
+    def do_POST(self):
+        form = cgi.FieldStorage(
+          fp=self.rfile,
+          headers=self.headers,
+          environ={"REQUEST_METHOD": "POST",
+                   "CONTENT_TYPE": self.headers["Content-Type"]}
+        )
+
+        filename = form["file"].filename
+        target = "%s/%s" % (options.target, filename)
+        filename, extension = os.path.splitext(target)
+
+        counter = 0
+        while os.path.isfile(target):
+            target = "%s_%d%s" % (filename, counter, extension)
+            counter += 1
+
+        data = form["file"].file.read()
+        open(target, "wb").write(data)
+
+        self.send_response(200)
+
+if not os.access(options.target, os.W_OK):
+    print "Upload directory does not exist, or is not writable."
+    exit()
+
+try:
+    httpd = BaseHTTPServer.HTTPServer(("", options.port), Handler)
+    print "Serving at port", options.port, "uploading to", options.target
+    httpd.serve_forever()
+except (KeyboardInterrupt, SystemExit):
+    httpd.shutdown()
